@@ -207,7 +207,8 @@ async function rotaInfo(res, url) {
 }
 
 function rotaBaixar(req, res, url, tipo, modo) {
-  const p = spawn(YTDLP, argumentos([...FORMATOS[tipo], '-o', '-'], url, modo), { stdio: ['ignore', 'pipe', 'pipe'] });
+  // baixar em pedaços de 10 MB evita o freio que o YouTube põe em downloads contínuos
+  const p = spawn(YTDLP, argumentos([...FORMATOS[tipo], '--http-chunk-size', '10M', '--concurrent-fragments', '4', '-o', '-'], url, modo), { stdio: ['ignore', 'pipe', 'pipe'] });
   let falha = '', comecou = false, acabou = false;
   p.stderr.on('data', (c) => { if (falha.length < 20000) falha += c; });
   p.on('error', (e) => { falha += String(e); });
