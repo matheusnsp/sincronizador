@@ -54,7 +54,7 @@ test('senha errada é recusada, senha certa entra', async () => {
   cookie = r.headers.get('set-cookie').split(';')[0];
   assert.match(r.headers.get('set-cookie'), /HttpOnly/);
   assert.equal((await fetch(BASE + '/api/sessao', { headers: { cookie } })).status, 200);
-  assert.equal((await fetch(BASE + '/api/sessao', { headers: { cookie: cookie.slice(0, -1) + '0' } })).status, 401);
+  assert.equal((await fetch(BASE + '/api/sessao', { headers: { cookie: cookie.slice(0, -1) + (cookie.endsWith('0') ? '1' : '0') } })).status, 401);
 });
 
 test('só aceita link do YouTube', async () => {
