@@ -1,0 +1,17 @@
+{
+  "name": "sincronizador-pregacoes",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Sincroniza o áudio e o vídeo de pregações (YouTube ↔ arquivo do Drive)",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/nucleo.test.js test/servidor.test.js",
+    "test:e2e": "node test/e2e.mjs"
+  },
+  "dependencies": {
+    "@mediabunny/aac-encoder": "1.66.0",
+    "mediabunny": "1.66.0"
+  }
+}

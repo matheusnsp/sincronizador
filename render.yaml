@@ -1,0 +1,12 @@
+# Blueprint do Render: New > Blueprint > escolha este repositório.
+services:
+  - type: web
+    name: sincronizador-pregacoes
+    runtime: docker
+    plan: starter # o "free" serve pra testar, mas dorme depois de 15 min parado
+    healthCheckPath: /healthz
+    envVars:
+      - key: SENHA # a senha que vocês dois vão usar pra entrar
+        sync: false
+      - key: SEGREDO_COOKIE
+        generateValue: true

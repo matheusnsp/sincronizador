@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Sincronizador de pregações</title>
+  <link rel="stylesheet" href="/estilo.css">
+  <script type="importmap">{ "imports": { "mediabunny": "/vendor/mediabunny.mjs" } }</script>
+</head>
+<body>
+  <form id="login" class="login" hidden>
+    <h1>Sincronizador de pregações</h1>
+    <label for="senha">Senha</label>
+    <input id="senha" type="password" autocomplete="current-password" required>
+    <button type="submit">Entrar</button>
+    <p id="login-erro" class="erro" role="alert"></p>
+  </form>
+
+  <main id="app" hidden>
+    <header>
+      <h1>Sincronizador de pregações</h1>
+      <button id="sair" class="discreto" type="button">Sair</button>
+    </header>
+
+    <section class="fontes">
+      <div class="cartao">
+        <h2>1. YouTube</h2>
+        <div class="linha">
+          <input id="yt-link" type="url" placeholder="Cole o link do YouTube" aria-label="Link do YouTube">
+          <button id="yt-buscar" type="button">Buscar</button>
+        </div>
+        <label class="arquivo">ou envie o arquivo do YouTube à mão
+          <input id="yt-arquivo" type="file" accept="video/*,audio/*,.mkv,.webm,.m4a,.opus">
+        </label>
+        <p id="yt-estado" class="estado"></p>
+        <progress id="yt-progresso" max="1" value="0" hidden></progress>
+      </div>
+      <div class="cartao">
+        <h2>2. Arquivo do Drive</h2>
+        <label class="arquivo">Escolha o arquivo que você baixou do Drive
+          <input id="drive-arquivo" type="file" accept="video/*,audio/*,.mkv,.webm,.m4a,.mov">
+        </label>
+        <p id="drive-estado" class="estado"></p>
+        <progress id="drive-progresso" max="1" value="0" hidden></progress>
+      </div>
+    </section>
+
+    <section class="cartao" id="direcao">
+      <h2>3. De onde vem a imagem?</h2>
+      <label><input type="radio" name="direcao" value="drive" checked> <span><b>Imagem do Drive</b> + som do YouTube</span></label>
+      <label><input type="radio" name="direcao" value="yt"> <span><b>Imagem do YouTube</b> + som do Drive</span></label>
+      <p id="direcao-aviso" class="estado"></p>
+    </section>
+
+    <section class="cartao" id="ajuste" hidden>
+      <h2>4. Ajuste o atraso do som</h2>
+      <div class="barra">
+        <span class="legenda"><i class="cor-imagem"></i> <span id="nome-imagem">Imagem</span></span>
+        <span class="legenda"><i class="cor-som"></i> <span id="nome-som">Som</span> (arraste pra mover)</span>
+        <span class="espaco"></span>
+        <button id="zoom-menos" type="button" title="Afastar">−</button>
+        <button id="zoom-tudo" type="button">Ver tudo</button>
+        <button id="zoom-mais" type="button" title="Aproximar">+</button>
+      </div>
+      <canvas id="ondas" tabindex="0" aria-label="Formas de onda da imagem e do som"></canvas>
+      <div class="controles">
+        <div class="passos">
+          <button data-passo="-1" type="button">−1 s</button>
+          <button data-passo="-0.1" type="button">−100 ms</button>
+          <button data-passo="-0.01" type="button">−10 ms</button>
+          <button data-passo="-0.001" type="button">−1 ms</button>
+          <input id="atraso" type="text" inputmode="decimal" aria-label="Atraso do som em segundos" value="+0,000 s">
+          <button data-passo="0.001" type="button">+1 ms</button>
+          <button data-passo="0.01" type="button">+10 ms</button>
+          <button data-passo="0.1" type="button">+100 ms</button>
+          <button data-passo="1" type="button">+1 s</button>
+        </div>
+        <div class="linha">
+          <button id="sugerir" type="button">Sugerir automático</button>
+          <span id="sugestao" class="estado"></span>
+        </div>
+        <p class="dica">Positivo: o som entra depois. Negativo: o som entra antes. Teclado: ← → (10 ms), Shift (100 ms), Alt (1 ms), Ctrl (1 s), Espaço toca e pausa.</p>
+      </div>
+      <div class="previa">
+        <video id="video" muted playsinline preload="metadata"></video>
+        <audio id="audio" preload="metadata"></audio>
+        <div class="previa-controles">
+          <div class="linha">
+            <button id="tocar" type="button">▶ Tocar prévia</button>
+            <button id="voltar" type="button">↺ 5 s</button>
+            <span id="relogio" class="estado">0:00</span>
+          </div>
+          <label><input id="ouvir-original" type="checkbox"> Ouvir junto o som original da imagem (eco = fora de sincronia)</label>
+          <p id="previa-aviso" class="estado"></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="cartao" id="exportacao" hidden>
+      <h2>5. Baixar a versão sincronizada</h2>
+      <p class="dica">A imagem é copiada sem recodificar, então a qualidade fica idêntica. O som vai em AAC 256 kbps já com o atraso aplicado.</p>
+      <div class="linha">
+        <button id="exportar" class="principal" type="button">Baixar MP4 sincronizado</button>
+        <button id="cancelar" type="button" hidden>Cancelar</button>
+      </div>
+      <progress id="exportar-progresso" max="1" value="0" hidden></progress>
+      <p id="exportar-estado" class="estado" role="status"></p>
+    </section>
+  </main>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
