@@ -49,10 +49,11 @@ O código precisa estar num repositório do GitHub na conta que o Render enxerga
 
 ### Plano
 
-- **Starter** (pago) é o indicado. O **Free** serve pra testar, mas dorme depois de
+- O `render.yaml` usa o plano **Free**, que não pede cartão. Ele dorme depois de
   15 minutos parado (a primeira abertura demora cerca de 1 minuto) e tem menos banda.
 - No sentido YouTube → Drive, o vídeo inteiro passa pelo servidor (2 a 6 GB por
-  pregação). Isso conta na banda de saída do plano.
+  pregação). Isso conta na banda de saída do plano. Se o Free não der conta, troque
+  `plan: free` por `plan: starter` (pago) no `render.yaml`.
 
 ### Se o YouTube bloquear o servidor
 

@@ -3,7 +3,7 @@ services:
   - type: web
     name: sincronizador-pregacoes
     runtime: docker
-    plan: starter # o "free" serve pra testar, mas dorme depois de 15 min parado
+    plan: free # grátis: dorme depois de 15 min parado (a primeira abertura demora cerca de 1 minuto)
     healthCheckPath: /healthz
     envVars:
       - key: SENHA # a senha que vocês dois vão usar pra entrar
