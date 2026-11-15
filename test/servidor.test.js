@@ -144,6 +144,6 @@ test('YouTube: o erro traz os detalhes pra diagnóstico', async () => {
   const r = await fetch(`${BASE}/api/youtube/info?url=${encodeURIComponent('https://youtu.be/bloqueado')}`, { headers: { cookie } });
   const j = await r.json();
   assert.match(j.detalhe, /Cookies do YouTube: não configurados/);
-  assert.match(j.detalhe, /Tentativa 1: ERROR: \[youtube\] abc: Sign in/);
-  assert.match(j.detalhe, /Tentativa 2: /);
+  assert.match(j.detalhe, /Tentativa 1:\n  ERROR: \[youtube\] abc: Sign in/);
+  assert.match(j.detalhe, /Tentativa 2:/);
 });

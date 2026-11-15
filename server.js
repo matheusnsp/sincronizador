@@ -26,6 +26,7 @@ if (!SENHA) {
 // Vêm de um "Secret File" do Render (/etc/secrets/cookies.txt) ou da variável YT_COOKIES.
 let arquivoCookies = null;
 let linhasDeCookies = 0;
+let cookiesComLogin = false;
 {
   const segredo = process.env.YT_COOKIES_ARQUIVO || '/etc/secrets/cookies.txt';
   let conteudo = '';
@@ -36,6 +37,7 @@ let linhasDeCookies = 0;
     arquivoCookies = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'yt-')), 'cookies.txt');
     fs.writeFileSync(arquivoCookies, conteudo, { mode: 0o600 });
     linhasDeCookies = conteudo.split('\n').filter((l) => l.trim() && !l.startsWith('# ')).length;
+    cookiesComLogin = /\t(SID|__Secure-3PSID|LOGIN_INFO)\t/.test(conteudo);
   }
 }
 
@@ -120,8 +122,9 @@ const MODOS = [
   ['--extractor-args', 'youtube:player_client=tv,web_safari,mweb,web_embedded,android_vr'],
 ];
 
-function argumentos(extra, url, modo = 0) {
-  const a = ['--no-playlist', '--no-warnings', '--no-progress', '--no-cache-dir', ...MODOS[modo]];
+function argumentos(extra, url, modo = 0, avisos = false) {
+  const a = ['--no-playlist', '--no-progress', '--no-cache-dir', ...MODOS[modo]];
+  if (!avisos) a.push('--no-warnings');
   if (arquivoCookies) a.push('--cookies', arquivoCookies);
   return [...a, ...extra, '--', url];
 }
@@ -137,19 +140,20 @@ let ambiente = null;
 function detalhes(erros) {
   ambiente ??= { ytdlp: versaoDe(YTDLP), deno: versaoDe('deno') };
   const linhas = [
-    `Cookies do YouTube: ${arquivoCookies ? `lidos (${linhasDeCookies} cookies)` : 'não configurados'}`,
+    `Cookies do YouTube: ${arquivoCookies ? `lidos (${linhasDeCookies} cookies, ${cookiesComLogin ? 'com login' : 'SEM login: exporte de novo com a conta conectada no YouTube'})` : 'não configurados'}`,
     `yt-dlp: ${ambiente.ytdlp || 'não encontrado'} · Deno: ${ambiente.deno || 'não encontrado'}`,
   ];
   erros.forEach((e, i) => {
-    const ultimas = String(e || '').trim().split('\n').filter((l) => /ERROR/.test(l)).slice(-2).join(' | ') || String(e || '').trim().split('\n').pop() || 'sem mensagem';
-    linhas.push(`Tentativa ${i + 1}: ${ultimas.slice(0, 400)}`);
+    const todas = String(e || '').trim().split('\n').filter(Boolean);
+    const ultimas = todas.filter((l) => /ERROR|WARNING/.test(l)).slice(-5).join('\n  ') || todas.pop() || 'sem mensagem';
+    linhas.push(`Tentativa ${i + 1}:\n  ${ultimas.slice(0, 900)}`);
   });
   return linhas.join('\n');
 }
 
 function rodarJson(extra, url, modo = 0) {
   return new Promise((ok, erro) => {
-    const p = spawn(YTDLP, argumentos(['-J', ...extra], url, modo), { stdio: ['ignore', 'pipe', 'pipe'] });
+    const p = spawn(YTDLP, argumentos(['-J', ...extra], url, modo, true), { stdio: ['ignore', 'pipe', 'pipe'] });
     let saida = '', falha = '';
     const falhar = (bruto) => erro(Object.assign(new Error(mensagemDoErro(bruto)), { bruto }));
     p.stdout.on('data', (c) => (saida += c));
