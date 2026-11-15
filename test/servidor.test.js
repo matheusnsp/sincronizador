@@ -128,3 +128,22 @@ test('Drive: arquivo privado, sumido ou com limite de acessos vira mensagem clar
   assert.match(await erro('cota_estourada1'), /excesso de acessos/);
   assert.match(await erro('sumiu_arquivo12'), /Não achei/);
 });
+
+test('YouTube: se o primeiro jeito falha, tenta o segundo e usa ele no download', async () => {
+  const link = encodeURIComponent('https://youtu.be/modo2');
+  const r = await fetch(`${BASE}/api/youtube/info?url=${link}`, { headers: { cookie } });
+  assert.equal(r.status, 200);
+  assert.equal((await r.json()).modo, 1);
+  assert.equal((await fetch(`${BASE}/api/youtube/baixar?tipo=audio&modo=0&url=${link}`, { headers: { cookie } })).status, 502);
+  const ok = await fetch(`${BASE}/api/youtube/baixar?tipo=audio&modo=1&url=${link}`, { headers: { cookie } });
+  assert.equal(await ok.text(), 'AUDIO-FALSO');
+  assert.equal((await fetch(`${BASE}/api/youtube/baixar?tipo=audio&modo=9&url=${link}`, { headers: { cookie } })).status, 400);
+});
+
+test('YouTube: o erro traz os detalhes pra diagnóstico', async () => {
+  const r = await fetch(`${BASE}/api/youtube/info?url=${encodeURIComponent('https://youtu.be/bloqueado')}`, { headers: { cookie } });
+  const j = await r.json();
+  assert.match(j.detalhe, /Cookies do YouTube: não configurados/);
+  assert.match(j.detalhe, /Tentativa 1: ERROR: \[youtube\] abc: Sign in/);
+  assert.match(j.detalhe, /Tentativa 2: /);
+});

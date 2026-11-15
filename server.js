@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 
@@ -25,6 +25,7 @@ if (!SENHA) {
 // Cookies do YouTube (opcional), pra quando o YouTube bloqueia o servidor ou o vídeo é privado.
 // Vêm de um "Secret File" do Render (/etc/secrets/cookies.txt) ou da variável YT_COOKIES.
 let arquivoCookies = null;
+let linhasDeCookies = 0;
 {
   const segredo = process.env.YT_COOKIES_ARQUIVO || '/etc/secrets/cookies.txt';
   let conteudo = '';
@@ -34,6 +35,7 @@ let arquivoCookies = null;
     // o yt-dlp regrava o arquivo de cookies, então ele usa uma cópia numa pasta temporária
     arquivoCookies = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'yt-')), 'cookies.txt');
     fs.writeFileSync(arquivoCookies, conteudo, { mode: 0o600 });
+    linhasDeCookies = conteudo.split('\n').filter((l) => l.trim() && !l.startsWith('# ')).length;
   }
 }
 
@@ -99,7 +101,7 @@ export function linkDoYoutube(texto) {
 function mensagemDoErro(stderr) {
   const t = stderr || '';
   if (/Sign in to confirm|not a bot|HTTP Error 429|Too Many Requests|Failed to extract any player response|page needs to be reloaded/i.test(t)) {
-    return 'O YouTube bloqueou o servidor (ele recusa servidores na nuvem). Configure os cookies do YouTube no Render (veja o README).';
+    return 'O YouTube bloqueou o servidor (ele recusa servidores na nuvem). Você pode baixar por fora e escolher o arquivo aqui embaixo.';
   }
   if (/Private video|members-only|Join this channel/i.test(t)) {
     return 'Esse vídeo é privado ou só pra membros. Configure no Render os cookies de uma conta com acesso ou envie o arquivo à mão.';
@@ -112,22 +114,50 @@ function mensagemDoErro(stderr) {
   return 'Não consegui baixar do YouTube: ' + ultima.replace(/^ERROR:\s*/, '').slice(0, 300);
 }
 
-function argumentos(extra, url) {
-  const a = ['--no-playlist', '--no-warnings', '--no-progress', '--no-cache-dir'];
+// Jeitos de pedir o vídeo ao YouTube. Se o primeiro falhar, o servidor tenta o próximo.
+const MODOS = [
+  [],
+  ['--extractor-args', 'youtube:player_client=tv,web_safari,mweb,web_embedded,android_vr'],
+];
+
+function argumentos(extra, url, modo = 0) {
+  const a = ['--no-playlist', '--no-warnings', '--no-progress', '--no-cache-dir', ...MODOS[modo]];
   if (arquivoCookies) a.push('--cookies', arquivoCookies);
   return [...a, ...extra, '--', url];
 }
 
-function rodarJson(extra, url) {
+function versaoDe(comando) {
+  try {
+    const r = spawnSync(comando, ['--version'], { encoding: 'utf8', timeout: 15000 });
+    return r.status === 0 ? r.stdout.trim().split('\n')[0] : null;
+  } catch { return null; }
+}
+let ambiente = null;
+/** Texto pra ajudar a descobrir por que o YouTube recusou (aparece na tela junto do erro). */
+function detalhes(erros) {
+  ambiente ??= { ytdlp: versaoDe(YTDLP), deno: versaoDe('deno') };
+  const linhas = [
+    `Cookies do YouTube: ${arquivoCookies ? `lidos (${linhasDeCookies} cookies)` : 'não configurados'}`,
+    `yt-dlp: ${ambiente.ytdlp || 'não encontrado'} · Deno: ${ambiente.deno || 'não encontrado'}`,
+  ];
+  erros.forEach((e, i) => {
+    const ultimas = String(e || '').trim().split('\n').filter((l) => /ERROR/.test(l)).slice(-2).join(' | ') || String(e || '').trim().split('\n').pop() || 'sem mensagem';
+    linhas.push(`Tentativa ${i + 1}: ${ultimas.slice(0, 400)}`);
+  });
+  return linhas.join('\n');
+}
+
+function rodarJson(extra, url, modo = 0) {
   return new Promise((ok, erro) => {
-    const p = spawn(YTDLP, argumentos(['-J', ...extra], url), { stdio: ['ignore', 'pipe', 'pipe'] });
+    const p = spawn(YTDLP, argumentos(['-J', ...extra], url, modo), { stdio: ['ignore', 'pipe', 'pipe'] });
     let saida = '', falha = '';
+    const falhar = (bruto) => erro(Object.assign(new Error(mensagemDoErro(bruto)), { bruto }));
     p.stdout.on('data', (c) => (saida += c));
     p.stderr.on('data', (c) => (falha += c));
-    p.on('error', (e) => erro(new Error(mensagemDoErro(String(e)))));
+    p.on('error', (e) => falhar(String(e)));
     p.on('close', (cod) => {
-      if (cod !== 0) return erro(new Error(mensagemDoErro(falha)));
-      try { ok(JSON.parse(saida)); } catch { erro(new Error('O yt-dlp devolveu uma resposta que não entendi.')); }
+      if (cod !== 0) return falhar(falha);
+      try { ok(JSON.parse(saida)); } catch { falhar('O yt-dlp devolveu uma resposta que não entendi.'); }
     });
   });
 }
@@ -145,24 +175,30 @@ function resumo(j) {
 }
 
 async function rotaInfo(res, url) {
-  try {
-    const [a, v] = await Promise.all([
-      rodarJson(FORMATOS.audio, url),
-      rodarJson(FORMATOS.video, url).catch(() => null),
-    ]);
-    json(res, 200, {
-      titulo: a.title || 'Vídeo do YouTube',
-      duracao: a.duration || null,
-      audio: resumo(a),
-      video: v ? resumo(v) : null,
-    });
-  } catch (e) {
-    json(res, 502, { erro: e.message });
+  const erros = [];
+  let primeira = null;
+  for (let modo = 0; modo < MODOS.length; modo++) {
+    try {
+      const a = await rodarJson(FORMATOS.audio, url, modo);
+      const v = await rodarJson(FORMATOS.video, url, modo).catch(() => null);
+      return json(res, 200, {
+        titulo: a.title || 'Vídeo do YouTube',
+        duracao: a.duration || null,
+        audio: resumo(a),
+        video: v ? resumo(v) : null,
+        modo,
+      });
+    } catch (e) {
+      primeira ??= e.message;
+      erros.push(e.bruto || e.message);
+      console.error(`[youtube] tentativa ${modo + 1} falhou: ${String(e.bruto || e.message).trim().slice(0, 1000)}`);
+    }
   }
+  json(res, 502, { erro: primeira, detalhe: detalhes(erros) });
 }
 
-function rotaBaixar(req, res, url, tipo) {
-  const p = spawn(YTDLP, argumentos([...FORMATOS[tipo], '-o', '-'], url), { stdio: ['ignore', 'pipe', 'pipe'] });
+function rotaBaixar(req, res, url, tipo, modo) {
+  const p = spawn(YTDLP, argumentos([...FORMATOS[tipo], '-o', '-'], url, modo), { stdio: ['ignore', 'pipe', 'pipe'] });
   let falha = '', comecou = false, acabou = false;
   p.stderr.on('data', (c) => { if (falha.length < 20000) falha += c; });
   p.on('error', (e) => { falha += String(e); });
@@ -174,7 +210,10 @@ function rotaBaixar(req, res, url, tipo) {
   });
   p.on('close', (cod) => {
     acabou = true;
-    if (!comecou) return json(res, 502, { erro: mensagemDoErro(falha) });
+    if (!comecou) {
+      console.error(`[youtube] download falhou: ${falha.trim().slice(0, 1000)}`);
+      return json(res, 502, { erro: mensagemDoErro(falha), detalhe: detalhes([falha]) });
+    }
     // se o yt-dlp falhou no meio, derruba a conexão pro navegador perceber que veio incompleto
     if (cod !== 0) res.destroy(); else res.end();
   });
@@ -286,7 +325,9 @@ const servidor = http.createServer(async (req, res) => {
         if (rota === '/api/youtube/info') return rotaInfo(res, url);
         const tipo = u.searchParams.get('tipo');
         if (!Object.hasOwn(FORMATOS, tipo)) return json(res, 400, { erro: 'Tipo inválido.' });
-        return rotaBaixar(req, res, url, tipo);
+        const modo = Number(u.searchParams.get('modo') || 0);
+        if (!Number.isInteger(modo) || modo < 0 || modo >= MODOS.length) return json(res, 400, { erro: 'Modo inválido.' });
+        return rotaBaixar(req, res, url, tipo, modo);
       }
       if (req.method === 'GET' && rota === '/api/drive/baixar') {
         const link = u.searchParams.get('url') || '';

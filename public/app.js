@@ -101,10 +101,14 @@ async function limparTemporarios() {
   } catch {}
 }
 
+function erroDoServidor(corpo, padrao) {
+  return new Error((corpo.erro || padrao) + (corpo.detalhe ? '\n\nDetalhes técnicos:\n' + corpo.detalhe : ''));
+}
+
 /** Baixa do servidor direto pra um arquivo temporário do navegador (sem ocupar memória). */
 async function baixarDoServidor(caminho, nome, total, aoProgresso, sinal, falha) {
   const r = await api(caminho, { signal: sinal });
-  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).erro || falha);
+  if (!r.ok) throw erroDoServidor(await r.json().catch(() => ({})), falha);
   total = total || Number(r.headers.get('content-length')) || null;
   const leitor = r.body.getReader();
   let gravavel = null, alca = null, pedacos = null, recebido = 0;
@@ -134,8 +138,8 @@ async function baixarDoServidor(caminho, nome, total, aoProgresso, sinal, falha)
   return { arquivo, nomeOriginal };
 }
 
-async function baixarDoYoutube(link, tipo, nome, total, aoProgresso, sinal) {
-  const r = await baixarDoServidor(`/api/youtube/baixar?tipo=${tipo}&url=${encodeURIComponent(link)}`, nome, total, aoProgresso, sinal,
+async function baixarDoYoutube(link, tipo, nome, total, aoProgresso, sinal, modo = 0) {
+  const r = await baixarDoServidor(`/api/youtube/baixar?tipo=${tipo}&modo=${modo}&url=${encodeURIComponent(link)}`, nome, total, aoProgresso, sinal,
     'O servidor não conseguiu baixar do YouTube.');
   return r.arquivo;
 }
@@ -215,14 +219,14 @@ async function buscarYoutube(q) {
     progresso(c.progresso, -1);
     const r = await api(`/api/youtube/info?url=${encodeURIComponent(link)}`);
     const info = await r.json();
-    if (!r.ok) throw new Error(info.erro || 'Não achei esse vídeo.');
+    if (!r.ok) throw erroDoServidor(info, 'Não achei esse vídeo.');
     if (minha !== versao[q]) return;
     const total = info.audio.tamanhoAproximado;
     const som = await baixarDoYoutube(link, 'audio', `fonte-${q}-som.${info.audio.ext || 'm4a'}`, total, (n, t) => {
       if (minha !== versao[q]) return;
       estado(c.estado, `Baixando o som de “${info.titulo}”: ${formatarTamanho(n)}${t ? ' de ' + formatarTamanho(t) : ''}`);
       progresso(c.progresso, t ? Math.min(1, n / t) : -1);
-    });
+    }, null, info.modo);
     if (minha !== versao[q]) return;
     versao[q]--; // carregarLado soma de novo
     Object.assign(f, { link, info, nome: info.titulo });
@@ -230,7 +234,7 @@ async function buscarYoutube(q) {
   } catch (erro) {
     if (minha !== versao[q]) return;
     progresso(c.progresso, null);
-    estado(c.estado, erro.message + ' Você também pode baixar por fora e escolher o arquivo aqui embaixo.', 'erro');
+    estado(c.estado, erro.message, 'erro');
   } finally {
     c.buscar.disabled = false;
   }
@@ -262,7 +266,7 @@ async function baixarVideoDoYoutube(q) {
     const total = info.tamanhoAproximado;
     const arq = await baixarDoYoutube(f.link, 'video', `fonte-${q}-imagem.${info.ext || 'mp4'}`, total, (n, t) => {
       estado(el.direcaoAviso, `Baixando a imagem do YouTube (${info.altura || '?'}p): ${formatarTamanho(n)}${t ? ' de ' + formatarTamanho(t) : ''}`);
-    }, controle.signal);
+    }, controle.signal, f.info.modo);
     if (minha !== versao[q]) return;
     f.imagem = arq;
   } catch (erro) {
