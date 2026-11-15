@@ -5,6 +5,10 @@ const args = process.argv.slice(2);
 const url = args[args.length - 1];
 const video = args.includes('res,fps,vcodec:h264');
 if (process.env.FAKE_YT_LOG) fs.appendFileSync(process.env.FAKE_YT_LOG, JSON.stringify(args) + '\n');
+if (url.includes('recusado')) {
+  console.error('ERROR: [youtube] abc: Failed to extract any player response; please report this issue on https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U');
+  process.exit(1);
+}
 if (url.includes('bloqueado')) {
   console.error('ERROR: [youtube] abc: Sign in to confirm you’re not a bot.');
   process.exit(1);

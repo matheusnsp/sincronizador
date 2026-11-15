@@ -5,8 +5,6 @@ import { formatarAtraso, lerAtraso, formatarTempo, formatarTamanho, nivelConfian
 const $ = (id) => document.getElementById(id);
 const el = {
   login: $('login'), senha: $('senha'), loginErro: $('login-erro'), app: $('app'), sair: $('sair'),
-  ytLink: $('yt-link'), ytBuscar: $('yt-buscar'), ytArquivo: $('yt-arquivo'), ytEstado: $('yt-estado'), ytProgresso: $('yt-progresso'),
-  driveArquivo: $('drive-arquivo'), driveEstado: $('drive-estado'), driveProgresso: $('drive-progresso'),
   direcaoAviso: $('direcao-aviso'), ajuste: $('ajuste'), exportacao: $('exportacao'),
   nomeImagem: $('nome-imagem'), nomeSom: $('nome-som'), ondas: $('ondas'), atraso: $('atraso'),
   sugerir: $('sugerir'), sugestao: $('sugestao'), video: $('video'), audio: $('audio'), tocar: $('tocar'),
@@ -14,24 +12,31 @@ const el = {
   exportar: $('exportar'), cancelar: $('cancelar'), exportarProgresso: $('exportar-progresso'), exportarEstado: $('exportar-estado'),
 };
 const radios = [...document.querySelectorAll('input[name=direcao]')];
+// os dois cartões de fonte são iguais: cada um aceita link do YouTube ou arquivo
+const cartao = {};
+for (const q of ['a', 'b']) {
+  cartao[q] = { link: $(q + '-link'), buscar: $(q + '-buscar'), arquivo: $(q + '-arquivo'), estado: $(q + '-estado'), progresso: $(q + '-progresso') };
+}
 
 // ---------- estado ----------
-const fontes = {
-  // som: arquivo com o áudio; imagem: arquivo com o vídeo (pode ser o mesmo)
-  yt: { som: null, imagem: null, onda: null, duracao: 0, link: null, info: null, baixandoVideo: null, manual: false },
-  drive: { som: null, imagem: null, onda: null, duracao: 0 },
-};
-let direcao = 'drive'; // de onde vem a imagem
+// som: arquivo com o áudio; imagem: arquivo com o vídeo (pode ser o mesmo).
+// link/info: quando a fonte veio do YouTube. nome: o que aparece na tela.
+const novaFonte = (numero) => ({ numero, som: null, imagem: null, onda: null, duracao: 0, link: null, info: null, baixandoVideo: null, nome: '' });
+const fontes = { a: novaFonte(1), b: novaFonte(2) };
+let direcao = 'a'; // qual fonte dá a imagem
 let atraso = 0; // segundos somados ao tempo do som
-let diferenca = null; // sugestão automática: tDrive = tYoutube + diferenca
+let diferenca = null; // sugestão automática: tempo na fonte 1 = tempo na fonte 2 + diferenca
 const vista = { inicio: 0, pps: 50 }; // tempo no começo da tela e pixels por segundo
 let semVideo = false; // o navegador não toca a imagem: a prévia fica só com o som
 let tocando = false;
 let exportando = null;
-let versao = { yt: 0, drive: 0 };
+let versao = { a: 0, b: 0 };
 
-const lados = () => (direcao === 'drive' ? { imagem: fontes.drive, som: fontes.yt } : { imagem: fontes.yt, som: fontes.drive });
-const nomeDe = (f) => (f === fontes.yt ? 'YouTube' : 'Drive');
+const outra = (q) => (q === 'a' ? 'b' : 'a');
+const lados = () => ({ imagem: fontes[direcao], som: fontes[outra(direcao)] });
+const nomeDe = (f) => `fonte ${f.numero}` + (f.nome ? ` (${f.nome.length > 40 ? f.nome.slice(0, 39) + '…' : f.nome})` : '');
+const temAlgo = (f) => !!(f.som || f.imagem);
+const podeDarImagem = (f) => !!(f.imagem || f.link);
 
 // ---------- login ----------
 async function api(caminho, opcoes) {
@@ -125,101 +130,98 @@ async function baixarDoYoutube(link, tipo, nome, total, aoProgresso, sinal) {
   return new File(pedacos, nome);
 }
 
-async function carregarLado(qual, arquivoSom, arquivoImagem, elEstado, elProgresso, rotulo) {
-  const f = fontes[qual];
-  const minha = ++versao[qual];
+async function carregarLado(q, arquivoSom, rotulo) {
+  const f = fontes[q], c = cartao[q];
+  const minha = ++versao[q];
   f.som = f.imagem = f.onda = null; f.duracao = 0;
   diferenca = null;
   atualizar();
-  estado(elEstado, `Lendo o som de ${rotulo}…`);
-  progresso(elProgresso, 0);
+  estado(c.estado, `Lendo o som de ${rotulo}…`);
+  progresso(c.progresso, 0);
   try {
-    const r = await analisar(arquivoSom, { aoProgresso: (p) => { if (minha === versao[qual]) progresso(elProgresso, p); } });
-    if (minha !== versao[qual]) return;
+    const r = await analisar(arquivoSom, { aoProgresso: (p) => { if (minha === versao[q]) progresso(c.progresso, p); } });
+    if (minha !== versao[q]) return;
     f.duracao = r.duracao;
     f.som = r.temAudio ? arquivoSom : null;
-    f.imagem = arquivoImagem || (r.temVideo ? arquivoSom : null);
+    f.imagem = r.temVideo ? arquivoSom : null;
     f.onda = r.env ? criarOnda(r.env) : null;
     const extra = r.aviso ? ' ' + r.aviso : !r.temAudio ? ' Sem som: o ajuste vai ser manual.' : '';
-    estado(elEstado, `${rotulo}: ${formatarTempo(r.duracao)} · ${r.descricao}.${extra}`, r.aviso || !r.temAudio ? '' : 'ok');
+    estado(c.estado, `${rotulo}: ${formatarTempo(r.duracao)} · ${r.descricao}.${extra}`, r.aviso || !r.temAudio ? '' : 'ok');
   } catch (erro) {
-    if (minha !== versao[qual]) return;
-    estado(elEstado, erro.message, 'erro');
+    if (minha !== versao[q]) return;
+    estado(c.estado, erro.message, 'erro');
   } finally {
-    if (minha === versao[qual]) { progresso(elProgresso, null); atualizar(true); }
+    if (minha === versao[q]) { progresso(c.progresso, null); atualizar(true); }
   }
 }
 
-el.driveArquivo.addEventListener('change', () => {
-  const arq = el.driveArquivo.files[0];
-  if (arq) carregarLado('drive', arq, null, el.driveEstado, el.driveProgresso, arq.name);
-});
-
-el.ytArquivo.addEventListener('change', () => {
-  const arq = el.ytArquivo.files[0];
-  if (!arq) return;
-  fontes.yt.baixandoVideo?.abort();
-  Object.assign(fontes.yt, { link: null, info: null, manual: true });
-  carregarLado('yt', arq, null, el.ytEstado, el.ytProgresso, arq.name);
-});
-
-async function buscarYoutube() {
-  const link = el.ytLink.value.trim();
-  if (!link) { estado(el.ytEstado, 'Cole o link do vídeo do YouTube.', 'erro'); return; }
-  fontes.yt.baixandoVideo?.abort();
-  const minha = ++versao.yt;
-  Object.assign(fontes.yt, { som: null, imagem: null, onda: null, link: null, info: null, manual: false });
-  el.ytBuscar.disabled = true;
+async function buscarYoutube(q) {
+  const f = fontes[q], c = cartao[q];
+  const link = c.link.value.trim();
+  if (!link) { estado(c.estado, 'Cole o link do vídeo do YouTube.', 'erro'); return; }
+  f.baixandoVideo?.abort();
+  const minha = ++versao[q];
+  Object.assign(f, { som: null, imagem: null, onda: null, duracao: 0, link: null, info: null, nome: '' });
+  c.arquivo.value = '';
+  c.buscar.disabled = true;
   atualizar();
   try {
-    estado(el.ytEstado, 'Procurando o vídeo no YouTube…');
-    progresso(el.ytProgresso, -1);
+    estado(c.estado, 'Procurando o vídeo no YouTube…');
+    progresso(c.progresso, -1);
     const r = await api(`/api/youtube/info?url=${encodeURIComponent(link)}`);
     const info = await r.json();
     if (!r.ok) throw new Error(info.erro || 'Não achei esse vídeo.');
-    if (minha !== versao.yt) return;
+    if (minha !== versao[q]) return;
     const total = info.audio.tamanhoAproximado;
-    const som = await baixarDoYoutube(link, 'audio', `youtube-som.${info.audio.ext || 'm4a'}`, total, (n, t) => {
-      if (minha !== versao.yt) return;
-      estado(el.ytEstado, `Baixando o som de “${info.titulo}”: ${formatarTamanho(n)}${t ? ' de ' + formatarTamanho(t) : ''}`);
-      progresso(el.ytProgresso, t ? Math.min(1, n / t) : -1);
+    const som = await baixarDoYoutube(link, 'audio', `fonte-${q}-som.${info.audio.ext || 'm4a'}`, total, (n, t) => {
+      if (minha !== versao[q]) return;
+      estado(c.estado, `Baixando o som de “${info.titulo}”: ${formatarTamanho(n)}${t ? ' de ' + formatarTamanho(t) : ''}`);
+      progresso(c.progresso, t ? Math.min(1, n / t) : -1);
     });
-    if (minha !== versao.yt) return;
-    versao.yt--; // carregarLado soma de novo
-    Object.assign(fontes.yt, { link, info });
-    await carregarLado('yt', som, null, el.ytEstado, el.ytProgresso, `“${info.titulo}”`);
-    Object.assign(fontes.yt, { link, info });
-    atualizar();
+    if (minha !== versao[q]) return;
+    versao[q]--; // carregarLado soma de novo
+    Object.assign(f, { link, info, nome: info.titulo });
+    await carregarLado(q, som, `“${info.titulo}”`);
   } catch (erro) {
-    if (minha !== versao.yt) return;
-    progresso(el.ytProgresso, null);
-    estado(el.ytEstado, erro.message, 'erro');
+    if (minha !== versao[q]) return;
+    progresso(c.progresso, null);
+    estado(c.estado, erro.message + ' Você também pode baixar por fora e escolher o arquivo aqui embaixo.', 'erro');
   } finally {
-    el.ytBuscar.disabled = false;
+    c.buscar.disabled = false;
   }
 }
-el.ytBuscar.addEventListener('click', buscarYoutube);
-el.ytLink.addEventListener('keydown', (e) => { if (e.key === 'Enter') buscarYoutube(); });
 
-/** No sentido YouTube → Drive, baixa também a imagem do YouTube. */
-async function baixarVideoDoYoutube() {
-  const f = fontes.yt;
+for (const q of ['a', 'b']) {
+  const c = cartao[q];
+  c.buscar.addEventListener('click', () => buscarYoutube(q));
+  c.link.addEventListener('keydown', (e) => { if (e.key === 'Enter') buscarYoutube(q); });
+  c.arquivo.addEventListener('change', () => {
+    const arq = c.arquivo.files[0];
+    if (!arq) return;
+    fontes[q].baixandoVideo?.abort();
+    Object.assign(fontes[q], { link: null, info: null, nome: arq.name });
+    carregarLado(q, arq, arq.name);
+  });
+}
+
+/** Quando a imagem vem de um link do YouTube, baixa também o vídeo dele. */
+async function baixarVideoDoYoutube(q) {
+  const f = fontes[q];
   if (!f.link || f.imagem || f.baixandoVideo) return;
   const controle = new AbortController();
   f.baixandoVideo = controle;
-  const minha = versao.yt;
+  const minha = versao[q];
   const info = f.info.video;
   try {
     if (!info) throw new Error('O YouTube não ofereceu a imagem desse vídeo.');
     const total = info.tamanhoAproximado;
-    const arq = await baixarDoYoutube(f.link, 'video', `youtube-imagem.${info.ext || 'mp4'}`, total, (n, t) => {
+    const arq = await baixarDoYoutube(f.link, 'video', `fonte-${q}-imagem.${info.ext || 'mp4'}`, total, (n, t) => {
       estado(el.direcaoAviso, `Baixando a imagem do YouTube (${info.altura || '?'}p): ${formatarTamanho(n)}${t ? ' de ' + formatarTamanho(t) : ''}`);
     }, controle.signal);
-    if (minha !== versao.yt) return;
+    if (minha !== versao[q]) return;
     f.imagem = arq;
-    estado(el.direcaoAviso, `Imagem do YouTube pronta (${info.altura || '?'}p, ${formatarTamanho(arq.size)}).`, 'ok');
   } catch (erro) {
-    if (erro.name !== 'AbortError' && minha === versao.yt) estado(el.direcaoAviso, erro.message + ' Você pode baixar o vídeo por fora e enviar à mão no passo 1.', 'erro');
+    if (erro.name !== 'AbortError' && minha === versao[q]) estado(el.direcaoAviso, erro.message + ` Você pode baixar o vídeo por fora e escolher o arquivo na fonte ${f.numero}.`, 'erro');
   } finally {
     if (f.baixandoVideo === controle) f.baixandoVideo = null;
     atualizar();
@@ -236,26 +238,27 @@ radios.forEach((r) => r.addEventListener('change', () => {
 
 let chavePrevia = '';
 function atualizar(novaFonte = false) {
-  const { imagem, som } = lados();
-  // se o arquivo do Drive só tem som, a imagem só pode vir do YouTube
-  if (novaFonte && direcao === 'drive' && fontes.drive.som && !fontes.drive.imagem && (fontes.yt.imagem || fontes.yt.link)) {
-    direcao = 'yt';
+  let { imagem, som } = lados();
+  // se a fonte da imagem só tem som e a outra pode dar imagem, troca sozinho
+  if (novaFonte && imagem.som && !podeDarImagem(imagem) && podeDarImagem(som)) {
+    direcao = outra(direcao);
     radios.forEach((r) => (r.checked = r.value === direcao));
+    if (atraso) definirAtraso(-atraso, false);
     return atualizar(true);
   }
-  if (direcao === 'yt' && fontes.yt.link && !fontes.yt.imagem && fontes.drive.som) baixarVideoDoYoutube();
+  if (imagem.link && !imagem.imagem && temAlgo(som)) baixarVideoDoYoutube(direcao);
 
   let aviso = '';
-  if (fontes.drive.som || fontes.drive.imagem || fontes.yt.som || fontes.yt.imagem) {
-    if (direcao === 'drive') {
-      if ((fontes.drive.som || fontes.drive.onda) && !fontes.drive.imagem) aviso = 'O arquivo do Drive não tem imagem. Escolha “Imagem do YouTube”.';
-      else if (fontes.yt.imagem && !fontes.yt.som) aviso = 'O arquivo do YouTube não tem som.';
-    } else {
-      if (fontes.drive.imagem && !fontes.drive.som) aviso = 'O arquivo do Drive não tem som pra usar.';
-      else if (fontes.yt.manual && fontes.yt.som && !fontes.yt.imagem) aviso = 'O arquivo do YouTube que você enviou só tem som. Envie o vídeo.';
-    }
+  if (temAlgo(imagem) && temAlgo(som)) {
+    if (!podeDarImagem(imagem)) aviso = `A fonte ${imagem.numero} não tem imagem.` + (podeDarImagem(som) ? ` Escolha “Imagem da fonte ${som.numero}”.` : ' Nenhuma das duas fontes tem imagem.');
+    else if (!som.som) aviso = `A fonte ${som.numero} não tem som pra usar.`;
   }
-  if (!fontes.yt.baixandoVideo && !(direcao === 'yt' && fontes.yt.imagem && fontes.yt.link)) estado(el.direcaoAviso, aviso, aviso ? 'erro' : '');
+  const baixando = fontes.a.baixandoVideo || fontes.b.baixandoVideo;
+  if (!baixando) {
+    if (!aviso && imagem.link && imagem.imagem) {
+      estado(el.direcaoAviso, `Imagem do YouTube pronta (${imagem.info?.video?.altura || '?'}p, ${formatarTamanho(imagem.imagem.size)}).`, 'ok');
+    } else estado(el.direcaoAviso, aviso, aviso ? 'erro' : '');
+  }
 
   const pronto = !!(imagem.imagem && som.som);
   const temOndas = !!(imagem.onda || som.onda);
@@ -263,10 +266,9 @@ function atualizar(novaFonte = false) {
   el.exportacao.hidden = !pronto;
   el.nomeImagem.textContent = `Imagem: ${nomeDe(imagem)}`;
   el.nomeSom.textContent = `Som: ${nomeDe(som)}`;
-  el.sugerir.disabled = !(fontes.drive.onda && fontes.yt.onda);
-  if (!fontes.drive.onda || !fontes.yt.onda) {
-    estado(el.sugestao, (fontes.drive.som || fontes.drive.imagem) && (fontes.yt.som || fontes.yt.imagem)
-      ? 'Um dos lados não tem som, então o ajuste é manual.' : '');
+  el.sugerir.disabled = !(fontes.a.onda && fontes.b.onda);
+  if (!fontes.a.onda || !fontes.b.onda) {
+    estado(el.sugestao, temAlgo(fontes.a) && temAlgo(fontes.b) ? 'Um dos lados não tem som, então o ajuste é manual.' : '');
   }
 
   // prévia
@@ -274,6 +276,7 @@ function atualizar(novaFonte = false) {
   if (chave !== chavePrevia) {
     chavePrevia = chave;
     pausar();
+    if (!exportando) estado(el.exportarEstado, ''); // o "Pronto" anterior era de outros arquivos
     semVideo = false;
     estado(el.previaAviso, '');
     for (const m of [el.video, el.audio]) { if (m.src) URL.revokeObjectURL(m.src); m.removeAttribute('src'); m.load(); }
@@ -286,7 +289,7 @@ function atualizar(novaFonte = false) {
   if (novaFonte) {
     redimensionar();
     verTudo();
-    if (fontes.drive.onda && fontes.yt.onda && diferenca == null) sugerir();
+    if (fontes.a.onda && fontes.b.onda && diferenca == null) sugerir();
   }
   desenhar();
 }
@@ -308,7 +311,7 @@ el.atraso.addEventListener('keydown', (e) => { if (e.key === 'Enter') el.atraso.
 
 let calculando = 0;
 function sugerir() {
-  if (!fontes.drive.onda || !fontes.yt.onda) return;
+  if (!fontes.a.onda || !fontes.b.onda) return;
   const minha = ++calculando;
   el.sugerir.disabled = true;
   estado(el.sugestao, 'Comparando as ondas…');
@@ -320,14 +323,14 @@ function sugerir() {
     if (!e.data.ok) return estado(el.sugestao, 'Não consegui comparar: ' + e.data.erro, 'erro');
     diferenca = e.data.segundos;
     const nivel = nivelConfianca(e.data.confianca);
-    definirAtraso(direcao === 'drive' ? diferenca : -diferenca, false);
+    definirAtraso(direcao === 'a' ? diferenca : -diferenca, false);
     estado(el.sugestao, nivel === 'baixa'
       ? `Sugestão: ${formatarAtraso(atraso)}, mas com confiança baixa. Confira na prévia e ajuste à mão.`
       : `Sugestão: ${formatarAtraso(atraso)} (confiança ${nivel}). Confira na prévia.`, nivel === 'baixa' ? 'erro' : 'ok');
     centralizarNoSom();
   };
   w.onerror = () => { w.terminate(); el.sugerir.disabled = false; estado(el.sugestao, 'Não consegui comparar as ondas.', 'erro'); };
-  w.postMessage({ a: fontes.drive.onda.env, b: fontes.yt.onda.env });
+  w.postMessage({ a: fontes.a.onda.env, b: fontes.b.onda.env });
 }
 el.sugerir.addEventListener('click', sugerir);
 
@@ -539,7 +542,7 @@ document.addEventListener('keydown', (e) => {
 el.exportar.addEventListener('click', async () => {
   const { imagem, som } = lados();
   if (!imagem.imagem || !som.som || exportando) return;
-  const nome = imagem.imagem.name.replace(/\.[^.]+$/, '').replace(/^youtube-imagem$/, fontes.yt.info?.titulo || 'pregacao')
+  const nome = (imagem.link ? imagem.info?.titulo || 'pregacao' : imagem.imagem.name.replace(/\.[^.]+$/, ''))
     .replace(/[\\/:*?"<>|]+/g, ' ').trim() + '-sincronizado.mp4';
   let gravavel = null;
   if (window.showSaveFilePicker) {

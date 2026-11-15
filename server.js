@@ -96,8 +96,8 @@ export function linkDoYoutube(texto) {
 
 function mensagemDoErro(stderr) {
   const t = stderr || '';
-  if (/Sign in to confirm|not a bot|HTTP Error 429|Too Many Requests/i.test(t)) {
-    return 'O YouTube bloqueou o servidor (pediu pra confirmar que não é um robô). Atualize os cookies do YouTube no Render ou baixe o arquivo por fora e envie à mão.';
+  if (/Sign in to confirm|not a bot|HTTP Error 429|Too Many Requests|Failed to extract any player response|page needs to be reloaded/i.test(t)) {
+    return 'O YouTube bloqueou o servidor (ele recusa servidores na nuvem). Configure os cookies do YouTube no Render (veja o README).';
   }
   if (/Private video|members-only|Join this channel/i.test(t)) {
     return 'Esse vídeo é privado ou só pra membros. Configure no Render os cookies de uma conta com acesso ou envie o arquivo à mão.';

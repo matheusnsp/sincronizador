@@ -84,9 +84,11 @@ test('baixar entrega o áudio e o vídeo', async () => {
 });
 
 test('bloqueio do YouTube vira mensagem clara', async () => {
-  for (const rota of ['info?', 'baixar?tipo=audio&']) {
-    const r = await fetch(`${BASE}/api/youtube/${rota}url=${encodeURIComponent('https://youtu.be/bloqueado')}`, { headers: { cookie } });
-    assert.equal(r.status, 502);
-    assert.match((await r.json()).erro, /bloqueou o servidor/);
+  for (const video of ['bloqueado', 'recusado']) {
+    for (const rota of ['info?', 'baixar?tipo=audio&']) {
+      const r = await fetch(`${BASE}/api/youtube/${rota}url=${encodeURIComponent('https://youtu.be/' + video)}`, { headers: { cookie } });
+      assert.equal(r.status, 502);
+      assert.match((await r.json()).erro, /bloqueou o servidor/);
+    }
   }
 });

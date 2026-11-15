@@ -1,9 +1,8 @@
 # Sincronizador de pregações
 
-Site pra juntar a **imagem** de um lado com o **som** do outro, nos dois sentidos:
-
-- **Drive → YouTube**: imagem do arquivo do Drive + som do YouTube.
-- **YouTube → Drive**: imagem do YouTube + som do arquivo do Drive.
+Site pra juntar a **imagem** de uma fonte com o **som** de outra. São duas fontes, e
+cada uma pode ser um **link do YouTube** ou um **arquivo** (o que você baixou do
+Drive, por exemplo). Você escolhe qual das duas dá a imagem, e o som vem da outra.
 
 Ele mostra as duas ondas de volume, sugere o atraso sozinho, deixa ajustar à mão
 (arrastando, ou em passos de 1 s, 100 ms, 10 ms e 1 ms) e monta um MP4 novo.
@@ -14,18 +13,17 @@ Ele mostra as duas ondas de volume, sugere o atraso sozinho, deixa ajustar à m�
 - O **som** é gravado em AAC 256 kbps já com o atraso aplicado (silêncio de verdade no
   começo, ou corte, conforme o caso). Assim o arquivo toca certo em qualquer player e
   pode subir pro YouTube sem perder a sincronia.
-- O arquivo do Drive **nunca sai do seu computador**: tudo é feito no navegador. O
+- Os arquivos que você escolhe **nunca saem do seu computador**: tudo é feito no navegador. O
   servidor só baixa do YouTube.
 
 ## Como usar
 
 1. Abra o site no **Chrome ou Edge do computador** e entre com a senha.
-2. Cole o link do YouTube e clique em **Buscar** (ou envie o arquivo à mão).
-3. Escolha o arquivo que você baixou do Drive.
-4. Escolha de onde vem a imagem.
-5. Confira a sugestão de atraso na prévia. Marque "Ouvir junto o som original" pra
+2. Em cada fonte, cole um link do YouTube e clique em **Buscar**, ou escolha um arquivo.
+3. Escolha de qual fonte vem a imagem.
+4. Confira a sugestão de atraso na prévia. Marque "Ouvir junto o som original" pra
    ouvir os dois sons ao mesmo tempo: se tiver eco, ainda não está no ponto.
-6. Clique em **Baixar MP4 sincronizado** e escolha onde salvar.
+5. Clique em **Baixar MP4 sincronizado** e escolha onde salvar.
 
 ## Publicar no Render
 
@@ -51,7 +49,7 @@ O código precisa estar num repositório do GitHub na conta que o Render enxerga
 
 - O `render.yaml` usa o plano **Free**, que não pede cartão. Ele dorme depois de
   15 minutos parado (a primeira abertura demora cerca de 1 minuto) e tem menos banda.
-- No sentido YouTube → Drive, o vídeo inteiro passa pelo servidor (2 a 6 GB por
+- Quando a imagem vem de um link do YouTube, o vídeo inteiro passa pelo servidor (2 a 6 GB por
   pregação). Isso conta na banda de saída do plano. Se o Free não der conta, troque
   `plan: free` por `plan: starter` (pago) no `render.yaml`.
 
@@ -60,8 +58,8 @@ O código precisa estar num repositório do GitHub na conta que o Render enxerga
 O YouTube às vezes recusa servidores na nuvem ("confirme que você não é um robô"), e
 vídeos privados sempre pedem login. Nos dois casos o site avisa. Há duas saídas:
 
-- **Na hora**: baixe o áudio ou o vídeo do YouTube por fora e use "envie o arquivo do
-  YouTube à mão".
+- **Na hora**: baixe o áudio ou o vídeo do YouTube por fora e escolha o arquivo na
+  fonte, no lugar do link.
 - **De vez**: dê ao servidor os cookies de uma conta do YouTube.
   1. No Chrome, numa **janela anônima**, entre no YouTube com a conta.
   2. Exporte os cookies de `youtube.com` em formato `cookies.txt` (Netscape), com uma

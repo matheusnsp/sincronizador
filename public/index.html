@@ -25,31 +25,37 @@
 
     <section class="fontes">
       <div class="cartao">
-        <h2>1. YouTube</h2>
+        <h2>1. Fonte 1</h2>
+        <p class="dica">Link do YouTube ou arquivo.</p>
         <div class="linha">
-          <input id="yt-link" type="url" placeholder="Cole o link do YouTube" aria-label="Link do YouTube">
-          <button id="yt-buscar" type="button">Buscar</button>
+          <input id="a-link" type="url" placeholder="Cole um link do YouTube" aria-label="Link do YouTube da fonte 1">
+          <button id="a-buscar" type="button">Buscar</button>
         </div>
-        <label class="arquivo">ou envie o arquivo do YouTube à mão
-          <input id="yt-arquivo" type="file" accept="video/*,audio/*,.mkv,.webm,.m4a,.opus">
+        <label class="arquivo">ou escolha um arquivo (o que você baixou do Drive, por exemplo)
+          <input id="a-arquivo" type="file" accept="video/*,audio/*,.mkv,.webm,.m4a,.mov,.opus">
         </label>
-        <p id="yt-estado" class="estado"></p>
-        <progress id="yt-progresso" max="1" value="0" hidden></progress>
+        <p id="a-estado" class="estado"></p>
+        <progress id="a-progresso" max="1" value="0" hidden></progress>
       </div>
       <div class="cartao">
-        <h2>2. Arquivo do Drive</h2>
-        <label class="arquivo">Escolha o arquivo que você baixou do Drive
-          <input id="drive-arquivo" type="file" accept="video/*,audio/*,.mkv,.webm,.m4a,.mov">
+        <h2>2. Fonte 2</h2>
+        <p class="dica">Link do YouTube ou arquivo.</p>
+        <div class="linha">
+          <input id="b-link" type="url" placeholder="Cole um link do YouTube" aria-label="Link do YouTube da fonte 2">
+          <button id="b-buscar" type="button">Buscar</button>
+        </div>
+        <label class="arquivo">ou escolha um arquivo (o que você baixou do Drive, por exemplo)
+          <input id="b-arquivo" type="file" accept="video/*,audio/*,.mkv,.webm,.m4a,.mov,.opus">
         </label>
-        <p id="drive-estado" class="estado"></p>
-        <progress id="drive-progresso" max="1" value="0" hidden></progress>
+        <p id="b-estado" class="estado"></p>
+        <progress id="b-progresso" max="1" value="0" hidden></progress>
       </div>
     </section>
 
     <section class="cartao" id="direcao">
       <h2>3. De onde vem a imagem?</h2>
-      <label><input type="radio" name="direcao" value="drive" checked> <span><b>Imagem do Drive</b> + som do YouTube</span></label>
-      <label><input type="radio" name="direcao" value="yt"> <span><b>Imagem do YouTube</b> + som do Drive</span></label>
+      <label><input type="radio" name="direcao" value="a" checked> <span><b>Imagem da fonte 1</b> + som da fonte 2</span></label>
+      <label><input type="radio" name="direcao" value="b"> <span><b>Imagem da fonte 2</b> + som da fonte 1</span></label>
       <p id="direcao-aviso" class="estado"></p>
     </section>
 

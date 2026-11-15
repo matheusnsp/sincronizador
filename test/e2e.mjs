@@ -129,10 +129,10 @@ try {
   await pagina.waitForSelector('#app:not([hidden])');
   console.log('✓ login');
 
-  // ---- cenário 1: imagem do Drive + som do YouTube (link) ----
-  await pagina.fill('#yt-link', 'https://www.youtube.com/watch?v=teste');
-  await pagina.click('#yt-buscar');
-  await pagina.setInputFiles('#drive-arquivo', `${TMP}/drive.mp4`);
+  // ---- cenário 1: imagem de um arquivo (fonte 1) + som de um link do YouTube (fonte 2) ----
+  await pagina.fill('#b-link', 'https://www.youtube.com/watch?v=teste');
+  await pagina.click('#b-buscar');
+  await pagina.setInputFiles('#a-arquivo', `${TMP}/drive.mp4`);
   await pagina.waitForFunction(() => document.getElementById('sugestao').textContent.includes('Sugestão'), null, { timeout: 60000 });
   const sugestao1 = await pagina.textContent('#sugestao');
   const a1 = await atrasoNaTela();
@@ -150,7 +150,7 @@ try {
   const d1 = sugerirDiferenca(envelopeDoArquivo(`${TMP}/saida-1.mp4`).env, envelopeDoArquivo(`${TMP}/drive.mp4`).env);
   console.log(`   som novo × som da câmera: ${(d1.segundos * 1000).toFixed(1)} ms`);
   assert.ok(Math.abs(d1.segundos) <= 0.006, 'o som novo tem que bater com o da câmera');
-  console.log('✓ Drive → YouTube: sugestão, imagem idêntica, som alinhado');
+  console.log('✓ arquivo (imagem) + link (som): sugestão, imagem idêntica, som alinhado');
 
   // ajuste manual: botões e campo
   await pagina.click('[data-passo="0.1"]');
@@ -159,38 +159,62 @@ try {
   await pagina.fill('#atraso', '1,5');
   await pagina.press('#atraso', 'Enter');
   assert.equal(await pagina.inputValue('#atraso'), '+1,500 s');
+  // trocar de quem vem a imagem inverte o atraso
+  await pagina.check('input[name=direcao][value=b]');
+  assert.equal(await pagina.inputValue('#atraso'), '−1,500 s');
+  await pagina.check('input[name=direcao][value=a]');
   console.log('✓ ajuste manual');
 
-  // ---- cenário 2: imagem do YouTube (baixada pelo link) + som do Drive ----
-  await pagina.setInputFiles('#drive-arquivo', `${TMP}/drive-som.webm`);
+  // ---- cenário 2: imagem do link do YouTube (fonte 2) + som de um arquivo só de áudio (fonte 1) ----
+  await pagina.setInputFiles('#a-arquivo', `${TMP}/drive-som.webm`);
   await pagina.waitForFunction(() => document.getElementById('direcao-aviso').textContent.includes('Imagem do YouTube pronta'), null, { timeout: 60000 });
-  assert.equal(await pagina.isChecked('input[name=direcao][value=yt]'), true, 'troca sozinho pra imagem do YouTube');
+  assert.equal(await pagina.isChecked('input[name=direcao][value=b]'), true, 'troca sozinho pra imagem da fonte 2');
   await pagina.waitForFunction(() => document.getElementById('sugestao').textContent.includes('Sugestão'), null, { timeout: 60000 });
   const a2 = await atrasoNaTela();
   console.log('  ', await pagina.textContent('#sugestao'));
   assert.ok(Math.abs(a2 - 2.345) <= 0.005, `atraso sugerido ${a2}, esperado +2,345`);
   await pagina.screenshot({ path: `${TMP}/tela-2.png`, fullPage: true });
   await exportarE(`${TMP}/saida-2.mp4`);
+  assert.equal(await pagina.evaluate(() => window.__nome), 'Pregação teste-sincronizado.mp4');
   assert.equal(md5Video(`${TMP}/saida-2.mp4`), md5Video(`${TMP}/yt-imagem.mp4`), 'a imagem tem que sair idêntica');
   const s2 = envelopeDoArquivo(`${TMP}/saida-2.mp4`);
   const pico = s2.amostras.subarray(0, 2.2 * 16000).reduce((m, v) => Math.max(m, Math.abs(v)), 0);
   assert.ok(pico < 0.001, `o começo tem que ser silêncio (pico ${pico})`);
-  // a saída tem o som no tempo do YouTube: tem que bater com o som da mesa
   const d2 = sugerirDiferenca(s2.env, envelopeDoArquivo(`${TMP}/yt-som.webm`).env);
   console.log(`   som novo × som do YouTube: ${(d2.segundos * 1000).toFixed(1)} ms`);
-  assert.ok(Math.abs(d2.segundos) <= 0.006, 'o som do Drive tem que bater com o do YouTube');
-  console.log('✓ YouTube → Drive: baixa a imagem, sugestão, silêncio no começo, som alinhado');
+  assert.ok(Math.abs(d2.segundos) <= 0.006, 'o som do arquivo tem que bater com o do YouTube');
+  console.log('✓ link (imagem) + arquivo (som): baixa a imagem, sugestão, silêncio no começo, som alinhado');
 
-  // ---- YouTube bloqueado: mensagem clara e plano B ----
-  await pagina.fill('#yt-link', 'https://youtu.be/bloqueado');
-  await pagina.click('#yt-buscar');
-  await pagina.waitForFunction(() => document.getElementById('yt-estado').textContent.includes('bloqueou o servidor'));
-  await pagina.setInputFiles('#yt-arquivo', `${TMP}/yt-som.webm`);
-  await pagina.setInputFiles('#drive-arquivo', `${TMP}/drive.mp4`);
-  await pagina.check('input[name=direcao][value=drive]');
+  // ---- cenário 3: fontes invertidas (link na fonte 1, arquivo na fonte 2) ----
+  await pagina.reload();
+  await pagina.waitForSelector('#app:not([hidden])');
+  await pagina.setInputFiles('#b-arquivo', `${TMP}/drive.mp4`);
+  await pagina.fill('#a-link', 'https://youtu.be/teste');
+  await pagina.press('#a-link', 'Enter');
   await pagina.waitForFunction(() => document.getElementById('sugestao').textContent.includes('Sugestão'), null, { timeout: 60000 });
+  // imagem da fonte 1 (YouTube) + som da fonte 2 (arquivo): tYoutube = tArquivo + 2,345
+  assert.ok(Math.abs((await atrasoNaTela()) - 2.345) <= 0.005, 'atraso ' + (await atrasoNaTela()));
+  await pagina.waitForFunction(() => document.getElementById('direcao-aviso').textContent.includes('Imagem do YouTube pronta'), null, { timeout: 60000 });
+  await pagina.check('input[name=direcao][value=b]');
   assert.ok(Math.abs((await atrasoNaTela()) + 2.345) <= 0.005);
-  console.log('✓ bloqueio do YouTube e envio à mão');
+  await exportarE(`${TMP}/saida-3.mp4`);
+  assert.equal(md5Video(`${TMP}/saida-3.mp4`), md5Video(`${TMP}/drive.mp4`));
+  console.log('✓ fontes invertidas (link na fonte 1, arquivo na fonte 2)');
+
+  // ---- dois arquivos, sem YouTube nenhum ----
+  await pagina.setInputFiles('#a-arquivo', `${TMP}/yt-som.webm`);
+  await pagina.waitForFunction(() => document.getElementById('a-estado').textContent.includes('yt-som.webm: '));
+  await pagina.waitForFunction(() => /Sugestão: −2,34\d/.test(document.getElementById('sugestao').textContent), null, { timeout: 60000 });
+  assert.equal(await pagina.isChecked('input[name=direcao][value=b]'), true);
+  console.log('✓ dois arquivos');
+
+  // ---- YouTube bloqueado: mensagem clara, e dá pra escolher o arquivo no lugar ----
+  await pagina.fill('#a-link', 'https://youtu.be/recusado');
+  await pagina.click('#a-buscar');
+  await pagina.waitForFunction(() => document.getElementById('a-estado').textContent.includes('bloqueou o servidor'));
+  await pagina.setInputFiles('#a-arquivo', `${TMP}/yt-som.webm`);
+  await pagina.waitForFunction(() => /Sugestão: −2,34\d/.test(document.getElementById('sugestao').textContent), null, { timeout: 60000 });
+  console.log('✓ bloqueio do YouTube e arquivo no lugar');
 
   const semCodec = erros.filter((e) => !/DEMUXER_ERROR|Failed to load resource|MEDIA_ERR|NotSupported/i.test(e));
   assert.deepEqual(semCodec, [], 'erros no console');
