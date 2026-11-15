@@ -17,7 +17,10 @@ const YTDLP = process.env.YTDLP_BIN || 'yt-dlp';
 const VALIDADE = 30 * 24 * 3600; // 30 dias
 const DRIVE = process.env.DRIVE_BASE || 'https://drive.usercontent.google.com'; // só muda nos testes
 
-if (!SENHA) {
+// Modo local (LOCAL=1): roda só neste computador, sem senha, e usa o Node no lugar do Deno.
+const LOCAL = process.env.LOCAL === '1';
+
+if (!SENHA && !LOCAL) {
   console.error('Defina a variável de ambiente SENHA antes de iniciar o servidor.');
   process.exit(1);
 }
@@ -69,6 +72,7 @@ function iguais(a, b) {
   return crypto.timingSafeEqual(x, y);
 }
 function logado(req) {
+  if (LOCAL) return true;
   const m = /(?:^|;\s*)sessao=(\d+)\.([0-9a-f]+)/.exec(req.headers.cookie || '');
   if (!m) return false;
   return Number(m[1]) > Date.now() / 1000 && iguais(m[2], assinar(m[1]));
@@ -125,6 +129,7 @@ const MODOS = [
 function argumentos(extra, url, modo = 0, avisos = false) {
   const a = ['--no-playlist', '--no-progress', '--no-cache-dir', ...MODOS[modo]];
   if (!avisos) a.push('--no-warnings');
+  if (LOCAL) a.push('--js-runtimes', `node:${process.execPath}`);
   if (arquivoCookies) a.push('--cookies', arquivoCookies);
   return [...a, ...extra, '--', url];
 }
@@ -356,6 +361,7 @@ const servidor = http.createServer(async (req, res) => {
   }
 });
 
-servidor.listen(PORTA, () => {
+servidor.listen(PORTA, LOCAL ? '127.0.0.1' : undefined, () => {
   console.log(`Sincronizador no ar na porta ${PORTA}` + (arquivoCookies ? ' (com cookies do YouTube)' : ''));
+  if (LOCAL) console.log(`Abra http://localhost:${PORTA} no Chrome ou no Edge. Pra parar, feche esta janela.`);
 });

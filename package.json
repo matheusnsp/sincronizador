@@ -7,6 +7,7 @@
   "engines": { "node": ">=22" },
   "scripts": {
     "start": "node server.js",
+    "local": "LOCAL=1 node server.js",
     "test": "node --test test/nucleo.test.js test/servidor.test.js",
     "test:e2e": "node test/e2e.mjs"
   },

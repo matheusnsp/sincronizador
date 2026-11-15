@@ -147,3 +147,14 @@ test('YouTube: o erro traz os detalhes pra diagnóstico', async () => {
   assert.match(j.detalhe, /Tentativa 1:\n  ERROR: \[youtube\] abc: Sign in/);
   assert.match(j.detalhe, /Tentativa 2:/);
 });
+
+test('modo local: sem senha, só neste computador', async () => {
+  const p = spawn('node', ['server.js'], { cwd: RAIZ, env: { ...process.env, SENHA: '', LOCAL: '1', PORT: PORTA + 3, YTDLP_BIN: path.join(RAIZ, 'test/fake-ytdlp.mjs') }, stdio: 'ignore' });
+  try {
+    const base = `http://127.0.0.1:${PORTA + 3}`;
+    for (let i = 0; i < 50; i++) { try { if ((await fetch(base + '/healthz')).ok) break; } catch {} await new Promise((r) => setTimeout(r, 100)); }
+    assert.equal((await fetch(base + '/api/sessao')).status, 200);
+    const r = await fetch(`${base}/api/youtube/baixar?tipo=audio&url=${encodeURIComponent('https://youtu.be/abc')}`);
+    assert.equal(await r.text(), 'AUDIO-FALSO');
+  } finally { p.kill(); }
+});

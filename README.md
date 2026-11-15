@@ -88,14 +88,38 @@ Deploy → Clear build cache & deploy**: isso reinstala a versão mais nova.
 
 ## Rodar no seu computador
 
-Precisa de Node 22+, `yt-dlp` e `ffmpeg` instalados.
+Rodando no seu computador, o download do YouTube sai pela sua internet de casa, que o
+YouTube não costuma bloquear. Não precisa de senha: o site só abre nesse computador.
+
+**Mac**
+
+1. No GitHub, clique em **Code → Download ZIP** e descompacte a pasta.
+2. Dê dois cliques em `iniciar-mac.command`. Na primeira vez o Mac pode recusar:
+   clique com o botão direito no arquivo, escolha **Abrir** e confirme.
+3. Ele instala o que faltar (Node e yt-dlp, pelo Homebrew), abre o site em
+   `http://localhost:3000` e fica rodando numa janela do Terminal. Pra parar, feche
+   essa janela.
+
+Se o Mac não tiver o Homebrew, o próprio arquivo mostra como instalar.
+
+**Windows**
+
+Dê dois cliques em `iniciar-windows.bat`. Ele instala o Node e o yt-dlp pelo winget
+e abre o site. Se ele pedir, feche a janela e abra o arquivo de novo.
+
+**Na mão (qualquer sistema)**
+
+Precisa de Node 22+ e do `yt-dlp` instalados.
 
 ```
 npm install
-SENHA=minhasenha npm start     # abre em http://localhost:3000
+npm run local                  # sem senha, abre em http://localhost:3000
 npm test                       # testes do cálculo e do servidor
 npm run test:e2e               # teste completo no navegador (precisa do Playwright e do ffmpeg)
 ```
+
+Pra atualizar o sincronizador, baixe o ZIP de novo. Se o download do YouTube parar
+de funcionar, atualize o yt-dlp (`brew upgrade yt-dlp` no Mac).
 
 ## Limites
 
