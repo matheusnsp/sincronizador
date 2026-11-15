@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { Envelope, sugerirDiferenca } from '../public/nucleo.js';
+import { subirDriveFalso } from './fake-drive.mjs';
 
 const { chromium } = createRequire(import.meta.url)('playwright');
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -57,11 +58,12 @@ ff(...fonte, ...h264, '-t', '39', '-an', '-movflags', '+frag_keyframe+empty_moov
 ff('-i', `${TMP}/camera.wav`, '-c:a', 'libopus', '-b:a', '96k', `${TMP}/drive-som.webm`);
 
 // ---- servidor ----
+const driveFalso = await subirDriveFalso(PORTA + 1, `${TMP}/drive.mp4`);
 const servidor = spawn('node', ['server.js'], {
   cwd: RAIZ,
   env: {
     ...process.env, PORT: PORTA, SENHA: 'teste', YTDLP_BIN: path.join(RAIZ, 'test/fake-ytdlp.mjs'),
-    FAKE_YT_AUDIO: `${TMP}/yt-som.webm`, FAKE_YT_VIDEO: `${TMP}/yt-imagem.mp4`,
+    FAKE_YT_AUDIO: `${TMP}/yt-som.webm`, FAKE_YT_VIDEO: `${TMP}/yt-imagem.mp4`, DRIVE_BASE: `http://127.0.0.1:${PORTA + 1}`,
   },
   stdio: 'inherit',
 });
@@ -208,7 +210,25 @@ try {
   assert.equal(await pagina.isChecked('input[name=direcao][value=b]'), true);
   console.log('✓ dois arquivos');
 
+  // ---- link do Drive (com o aviso de arquivo grande) + link do YouTube ----
+  await pagina.reload();
+  await pagina.waitForSelector('#app:not([hidden])');
+  await pagina.fill('#a-link', 'https://drive.google.com/file/d/grande_arquivo-1/view?usp=sharing');
+  await pagina.click('#a-buscar');
+  await pagina.fill('#b-link', 'https://youtu.be/teste');
+  await pagina.click('#b-buscar');
+  await pagina.waitForFunction(() => /Sugestão: −2,34\d/.test(document.getElementById('sugestao').textContent), null, { timeout: 60000 });
+  assert.match(await pagina.textContent('#a-estado'), /^culto câmera\.mp4: 0:30 · imagem 320×240/);
+  await exportarE(`${TMP}/saida-4.mp4`);
+  assert.equal(await pagina.evaluate(() => window.__nome), 'culto câmera-sincronizado.mp4');
+  assert.equal(md5Video(`${TMP}/saida-4.mp4`), md5Video(`${TMP}/drive.mp4`));
+  await pagina.fill('#a-link', 'https://drive.google.com/file/d/privado_arquivo/view');
+  await pagina.click('#a-buscar');
+  await pagina.waitForFunction(() => document.getElementById('a-estado').textContent.includes('não está público'));
+  console.log('✓ link do Drive: baixa, sincroniza, exporta; arquivo privado avisa');
+
   // ---- YouTube bloqueado: mensagem clara, e dá pra escolher o arquivo no lugar ----
+  await pagina.setInputFiles('#b-arquivo', `${TMP}/drive.mp4`);
   await pagina.fill('#a-link', 'https://youtu.be/recusado');
   await pagina.click('#a-buscar');
   await pagina.waitForFunction(() => document.getElementById('a-estado').textContent.includes('bloqueou o servidor'));
@@ -225,4 +245,5 @@ try {
 } finally {
   await navegador?.close();
   servidor.kill();
+  driveFalso.close();
 }

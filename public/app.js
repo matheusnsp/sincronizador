@@ -102,9 +102,10 @@ async function limparTemporarios() {
 }
 
 /** Baixa do servidor direto pra um arquivo temporário do navegador (sem ocupar memória). */
-async function baixarDoYoutube(link, tipo, nome, total, aoProgresso, sinal) {
-  const r = await api(`/api/youtube/baixar?tipo=${tipo}&url=${encodeURIComponent(link)}`, { signal: sinal });
-  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).erro || 'O servidor não conseguiu baixar do YouTube.');
+async function baixarDoServidor(caminho, nome, total, aoProgresso, sinal, falha) {
+  const r = await api(caminho, { signal: sinal });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).erro || falha);
+  total = total || Number(r.headers.get('content-length')) || null;
   const leitor = r.body.getReader();
   let gravavel = null, alca = null, pedacos = null, recebido = 0;
   try {
@@ -123,11 +124,54 @@ async function baixarDoYoutube(link, tipo, nome, total, aoProgresso, sinal) {
   } catch (erro) {
     try { await gravavel?.abort(); } catch {}
     if (erro.name === 'AbortError') throw erro;
-    throw new Error('O download do YouTube parou no meio. Tente de novo.');
+    throw new Error('O download parou no meio. Tente de novo.');
   }
-  if (recebido === 0) throw new Error('O YouTube não devolveu nada.');
-  if (gravavel) { await gravavel.close(); return alca.getFile(); }
-  return new File(pedacos, nome);
+  if (recebido === 0) throw new Error('O download veio vazio.');
+  if (total && recebido < total) throw new Error('O download veio incompleto. Tente de novo.');
+  let nomeOriginal = null;
+  try { nomeOriginal = decodeURIComponent(r.headers.get('x-nome') || '') || null; } catch {}
+  const arquivo = gravavel ? (await gravavel.close(), await alca.getFile()) : new File(pedacos, nome);
+  return { arquivo, nomeOriginal };
+}
+
+async function baixarDoYoutube(link, tipo, nome, total, aoProgresso, sinal) {
+  const r = await baixarDoServidor(`/api/youtube/baixar?tipo=${tipo}&url=${encodeURIComponent(link)}`, nome, total, aoProgresso, sinal,
+    'O servidor não conseguiu baixar do YouTube.');
+  return r.arquivo;
+}
+
+const linkDoDrive = (texto) => {
+  try { return ['drive.google.com', 'docs.google.com', 'drive.usercontent.google.com'].includes(new URL(texto).hostname.toLowerCase()); } catch { return false; }
+};
+
+/** Link público do Google Drive: o servidor busca o arquivo e o navegador guarda numa pasta temporária. */
+async function buscarDrive(q, link) {
+  const f = fontes[q], c = cartao[q];
+  f.baixandoVideo?.abort();
+  const minha = ++versao[q];
+  Object.assign(f, { som: null, imagem: null, onda: null, duracao: 0, link: null, info: null, nome: '' });
+  c.arquivo.value = '';
+  c.buscar.disabled = true;
+  atualizar();
+  try {
+    estado(c.estado, 'Procurando o arquivo no Drive…');
+    progresso(c.progresso, -1);
+    const r = await baixarDoServidor(`/api/drive/baixar?url=${encodeURIComponent(link)}`, `fonte-${q}-drive`, null, (n, t) => {
+      if (minha !== versao[q]) return;
+      estado(c.estado, `Baixando do Drive: ${formatarTamanho(n)}${t ? ' de ' + formatarTamanho(t) : ''}`);
+      progresso(c.progresso, t ? Math.min(1, n / t) : -1);
+    }, null, 'O servidor não conseguiu baixar do Drive.');
+    if (minha !== versao[q]) return;
+    versao[q]--; // carregarLado soma de novo
+    f.nome = r.nomeOriginal || 'arquivo do Drive';
+    await carregarLado(q, r.arquivo, f.nome);
+  } catch (erro) {
+    if (minha !== versao[q]) return;
+    progresso(c.progresso, null);
+    estado(c.estado, erro.message, 'erro');
+  } finally {
+    c.buscar.disabled = false;
+  }
 }
 
 async function carregarLado(q, arquivoSom, rotulo) {
@@ -158,7 +202,8 @@ async function carregarLado(q, arquivoSom, rotulo) {
 async function buscarYoutube(q) {
   const f = fontes[q], c = cartao[q];
   const link = c.link.value.trim();
-  if (!link) { estado(c.estado, 'Cole o link do vídeo do YouTube.', 'erro'); return; }
+  if (!link) { estado(c.estado, 'Cole um link do YouTube ou do Google Drive.', 'erro'); return; }
+  if (linkDoDrive(link)) return buscarDrive(q, link);
   f.baixandoVideo?.abort();
   const minha = ++versao[q];
   Object.assign(f, { som: null, imagem: null, onda: null, duracao: 0, link: null, info: null, nome: '' });
@@ -542,7 +587,7 @@ document.addEventListener('keydown', (e) => {
 el.exportar.addEventListener('click', async () => {
   const { imagem, som } = lados();
   if (!imagem.imagem || !som.som || exportando) return;
-  const nome = (imagem.link ? imagem.info?.titulo || 'pregacao' : imagem.imagem.name.replace(/\.[^.]+$/, ''))
+  const nome = (imagem.nome || 'pregacao').replace(/\.(mp4|m4v|mov|mkv|webm|avi|mts|m2ts)$/i, '')
     .replace(/[\\/:*?"<>|]+/g, ' ').trim() + '-sincronizado.mp4';
   let gravavel = null;
   if (window.showSaveFilePicker) {

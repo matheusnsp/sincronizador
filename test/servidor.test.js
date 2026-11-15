@@ -3,16 +3,18 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { subirDriveFalso } from './fake-drive.mjs';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORTA = 34567;
 const BASE = `http://127.0.0.1:${PORTA}`;
-let proc, cookie;
+let proc, cookie, drive;
 
 test.before(async () => {
+  drive = await subirDriveFalso(PORTA + 2);
   proc = spawn('node', ['server.js'], {
     cwd: RAIZ,
-    env: { ...process.env, PORT: PORTA, SENHA: 'segredo', YTDLP_BIN: path.join(RAIZ, 'test/fake-ytdlp.mjs') },
+    env: { ...process.env, PORT: PORTA, SENHA: 'segredo', YTDLP_BIN: path.join(RAIZ, 'test/fake-ytdlp.mjs'), DRIVE_BASE: `http://127.0.0.1:${PORTA + 2}` },
     stdio: 'ignore',
   });
   for (let i = 0; i < 50; i++) {
@@ -21,7 +23,7 @@ test.before(async () => {
   }
   throw new Error('servidor não subiu');
 });
-test.after(() => proc.kill());
+test.after(() => { proc.kill(); drive.close(); });
 
 test('sem senha o servidor não sobe', async () => {
   const p = spawn('node', ['server.js'], { cwd: RAIZ, env: { ...process.env, SENHA: '', PORT: PORTA + 1 }, stdio: 'ignore' });
@@ -91,4 +93,38 @@ test('bloqueio do YouTube vira mensagem clara', async () => {
       assert.match((await r.json()).erro, /bloqueou o servidor/);
     }
   }
+});
+
+const doDrive = (link) => fetch(`${BASE}/api/drive/baixar?url=${encodeURIComponent(link)}`, { headers: { cookie } });
+
+test('Drive: exige login e só aceita link de arquivo do Drive', async () => {
+  assert.equal((await fetch(`${BASE}/api/drive/baixar?url=${encodeURIComponent('https://drive.google.com/file/d/abcdefghij123/view')}`)).status, 401);
+  for (const link of ['https://exemplo.com/file/d/abcdefghij123/view', 'https://drive.google.com.exemplo.com/file/d/abcdefghij123', 'https://drive.google.com/file/d/../x', 'nada']) {
+    assert.equal((await doDrive(link)).status, 400, link);
+  }
+  const pasta = await doDrive('https://drive.google.com/drive/folders/abcdefghij123');
+  assert.equal(pasta.status, 400);
+  assert.match((await pasta.json()).erro, /pasta/);
+});
+
+test('Drive: baixa o arquivo nos formatos de link comuns', async () => {
+  for (const link of [
+    'https://drive.google.com/file/d/abcdefghij123/view?usp=sharing',
+    'https://drive.google.com/open?id=abcdefghij123',
+    'https://drive.google.com/uc?id=abcdefghij123&export=download',
+    'https://drive.google.com/file/d/grande_arquivo-1/view?usp=drive_link',
+  ]) {
+    const r = await doDrive(link);
+    assert.equal(r.status, 200, link);
+    assert.equal(decodeURIComponent(r.headers.get('x-nome')), 'culto câmera.mp4');
+    assert.equal(r.headers.get('content-length'), '16');
+    assert.equal(await r.text(), 'ARQUIVO-DO-DRIVE');
+  }
+});
+
+test('Drive: arquivo privado, sumido ou com limite de acessos vira mensagem clara', async () => {
+  const erro = async (id) => { const r = await doDrive(`https://drive.google.com/file/d/${id}/view`); assert.equal(r.status, 502); return (await r.json()).erro; };
+  assert.match(await erro('privado_arquivo'), /não está público/);
+  assert.match(await erro('cota_estourada1'), /excesso de acessos/);
+  assert.match(await erro('sumiu_arquivo12'), /Não achei/);
 });

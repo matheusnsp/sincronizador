@@ -1,8 +1,8 @@
 # Sincronizador de pregações
 
 Site pra juntar a **imagem** de uma fonte com o **som** de outra. São duas fontes, e
-cada uma pode ser um **link do YouTube** ou um **arquivo** (o que você baixou do
-Drive, por exemplo). Você escolhe qual das duas dá a imagem, e o som vem da outra.
+cada uma pode ser um **link do YouTube**, um **link público do Google Drive** ou um
+**arquivo** do seu computador. Você escolhe qual das duas dá a imagem, e o som vem da outra.
 
 Ele mostra as duas ondas de volume, sugere o atraso sozinho, deixa ajustar à mão
 (arrastando, ou em passos de 1 s, 100 ms, 10 ms e 1 ms) e monta um MP4 novo.
@@ -13,13 +13,17 @@ Ele mostra as duas ondas de volume, sugere o atraso sozinho, deixa ajustar à m�
 - O **som** é gravado em AAC 256 kbps já com o atraso aplicado (silêncio de verdade no
   começo, ou corte, conforme o caso). Assim o arquivo toca certo em qualquer player e
   pode subir pro YouTube sem perder a sincronia.
+- Com link do Drive, o servidor busca o arquivo e repassa pro navegador, que guarda
+  numa pasta temporária. Nada fica gravado no servidor.
 - Os arquivos que você escolhe **nunca saem do seu computador**: tudo é feito no navegador. O
   servidor só baixa do YouTube.
 
 ## Como usar
 
 1. Abra o site no **Chrome ou Edge do computador** e entre com a senha.
-2. Em cada fonte, cole um link do YouTube e clique em **Buscar**, ou escolha um arquivo.
+2. Em cada fonte, cole um link do YouTube ou do Drive e clique em **Buscar**, ou
+   escolha um arquivo. O arquivo do Drive precisa estar compartilhado como
+   "Qualquer pessoa com o link".
 3. Escolha de qual fonte vem a imagem.
 4. Confira a sugestão de atraso na prévia. Marque "Ouvir junto o som original" pra
    ouvir os dois sons ao mesmo tempo: se tiver eco, ainda não está no ponto.
@@ -49,7 +53,7 @@ O código precisa estar num repositório do GitHub na conta que o Render enxerga
 
 - O `render.yaml` usa o plano **Free**, que não pede cartão. Ele dorme depois de
   15 minutos parado (a primeira abertura demora cerca de 1 minuto) e tem menos banda.
-- Quando a imagem vem de um link do YouTube, o vídeo inteiro passa pelo servidor (2 a 6 GB por
+- Quando a imagem vem de um link (do YouTube ou do Drive), o vídeo inteiro passa pelo servidor (2 a 6 GB por
   pregação). Isso conta na banda de saída do plano. Se o Free não der conta, troque
   `plan: free` por `plan: starter` (pago) no `render.yaml`.
 
@@ -69,6 +73,13 @@ vídeos privados sempre pedem login. Nos dois casos o site avisa. Há duas saíd
 
   Use uma conta secundária: esses cookies dão acesso a ela, e o YouTube pode
   restringir contas usadas assim.
+
+### Se o link do Drive não funcionar
+
+- **"Não está público"**: no Drive, abra Compartilhar e troque o acesso geral pra
+  "Qualquer pessoa com o link".
+- **"Excesso de acessos"**: o Google limita downloads automáticos de arquivos muito
+  baixados. Tente mais tarde, ou baixe o arquivo e escolha ele na fonte.
 
 ### Se o download do YouTube parar de funcionar
 

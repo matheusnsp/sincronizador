@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 
 const RAIZ = path.dirname(fileURLToPath(import.meta.url));
@@ -14,6 +15,7 @@ const SENHA = process.env.SENHA || '';
 const SEGREDO = process.env.SEGREDO_COOKIE || crypto.randomBytes(32).toString('hex');
 const YTDLP = process.env.YTDLP_BIN || 'yt-dlp';
 const VALIDADE = 30 * 24 * 3600; // 30 dias
+const DRIVE = process.env.DRIVE_BASE || 'https://drive.usercontent.google.com'; // só muda nos testes
 
 if (!SENHA) {
   console.error('Defina a variável de ambiente SENHA antes de iniciar o servidor.');
@@ -179,6 +181,69 @@ function rotaBaixar(req, res, url, tipo) {
   res.on('close', () => { if (!acabou) p.kill('SIGKILL'); });
 }
 
+/** Tira o código do arquivo de um link do Google Drive. Devolve null se não for um link de arquivo. */
+export function idDoDrive(texto) {
+  let u;
+  try { u = new URL(String(texto).trim()); } catch { return null; }
+  if (!['drive.google.com', 'docs.google.com', 'drive.usercontent.google.com'].includes(u.hostname.toLowerCase())) return null;
+  const m = /\/(?:file|document|presentation|spreadsheets)\/d\/([\w-]{10,})/.exec(u.pathname);
+  const id = m ? m[1] : u.searchParams.get('id');
+  return id && /^[\w-]{10,}$/.test(id) ? id : null;
+}
+
+function nomeDoArquivo(cabecalho) {
+  const estrela = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(cabecalho || '');
+  if (estrela) { try { return decodeURIComponent(estrela[1]); } catch {} }
+  const simples = /filename\s*=\s*"?([^";]+)"?/i.exec(cabecalho || '');
+  return simples ? simples[1] : 'arquivo-do-drive';
+}
+
+function erroDoDrive(status, html) {
+  if (status === 404) return 'Não achei esse arquivo no Drive. Confira o link.';
+  if (/Too many users|quota|limite de download|excedeu/i.test(html)) {
+    return 'O Drive bloqueou o download desse arquivo por excesso de acessos. Tente mais tarde ou baixe o arquivo e escolha ele aqui.';
+  }
+  if (status === 401 || status === 403 || /accounts\.google\.com|ServiceLogin|Sign in|Fazer login/i.test(html)) {
+    return 'Esse arquivo do Drive não está público. Compartilhe como “Qualquer pessoa com o link” ou baixe o arquivo e escolha ele aqui.';
+  }
+  return 'O Drive não liberou o download desse arquivo. Baixe o arquivo e escolha ele aqui.';
+}
+
+/** Busca um arquivo público do Drive e repassa pro navegador, sem gravar em disco. */
+async function rotaDrive(req, res, id) {
+  const controle = new AbortController();
+  res.on('close', () => controle.abort());
+  try {
+    let alvo = `${DRIVE}/download?id=${id}&export=download&confirm=t`;
+    let r;
+    for (let tentativa = 0; ; tentativa++) {
+      r = await fetch(alvo, { signal: controle.signal, redirect: 'follow' });
+      const tipo = r.headers.get('content-type') || '';
+      const anexo = /attachment/i.test(r.headers.get('content-disposition') || '');
+      if (r.ok && (anexo || !/text\/html/i.test(tipo))) break;
+      const html = await r.text();
+      // arquivo grande: o Drive mostra um aviso de "não foi possível verificar vírus" com um formulário
+      const form = /<form[^>]*id="download-form"[^>]*action="([^"]+)"/i.exec(html);
+      if (!r.ok || !form || tentativa > 0) return json(res, 502, { erro: erroDoDrive(r.status, html) });
+      const proximo = new URL(form[1].replace(/&amp;/g, '&'), DRIVE);
+      if (proximo.origin !== new URL(DRIVE).origin) return json(res, 502, { erro: erroDoDrive(r.status, '') });
+      for (const m of html.matchAll(/<input[^>]*type="hidden"[^>]*name="([^"]+)"[^>]*value="([^"]*)"/gi)) proximo.searchParams.set(m[1], m[2]);
+      alvo = proximo.toString();
+    }
+    const cabecalhos = {
+      'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no',
+      'X-Nome': encodeURIComponent(nomeDoArquivo(r.headers.get('content-disposition'))),
+    };
+    const tamanho = r.headers.get('content-length');
+    if (tamanho && !r.headers.get('content-encoding')) cabecalhos['Content-Length'] = tamanho;
+    res.writeHead(200, cabecalhos);
+    Readable.fromWeb(r.body).on('error', () => res.destroy()).pipe(res);
+  } catch (e) {
+    if (res.headersSent) res.destroy();
+    else if (!controle.signal.aborted) json(res, 502, { erro: 'Não consegui falar com o Google Drive. Tente de novo.' });
+  }
+}
+
 function servirArquivo(res, arquivo, cache) {
   fs.readFile(arquivo, (erro, dados) => {
     if (erro) { res.writeHead(404); return res.end('Não encontrado'); }
@@ -222,6 +287,13 @@ const servidor = http.createServer(async (req, res) => {
         const tipo = u.searchParams.get('tipo');
         if (!Object.hasOwn(FORMATOS, tipo)) return json(res, 400, { erro: 'Tipo inválido.' });
         return rotaBaixar(req, res, url, tipo);
+      }
+      if (req.method === 'GET' && rota === '/api/drive/baixar') {
+        const link = u.searchParams.get('url') || '';
+        if (/\/folders\//.test(link)) return json(res, 400, { erro: 'Esse link é de uma pasta do Drive. Cole o link do arquivo.' });
+        const id = idDoDrive(link);
+        if (!id) return json(res, 400, { erro: 'Esse link não parece ser de um arquivo do Google Drive.' });
+        return rotaDrive(req, res, id);
       }
       return json(res, 404, { erro: 'Não encontrado.' });
     }
